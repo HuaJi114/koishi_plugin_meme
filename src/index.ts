@@ -1,17 +1,19 @@
 import { Context } from 'koishi'
 import { Config as MemeConfig } from './config'
 import { MemeService } from './service'
-import { ImageCollector } from './collector'
+import { ImageCollector, pickImage } from './collector'
 import { applyUserCommands } from './modules/user'
 import { applyAdminCommands } from './modules/admin'
 import { applyTrigger } from './modules/trigger'
 import { makeAccessFilter, makeUserFilter } from './access'
+import { slashAliases, renderCommandList } from './slash'
 
 export * from './config'
 export * from './service'
 export * from './helpers'
 export * from './access'
 export { ImageCollector, pickImage, pickAtIds } from './collector'
+export * from './slash'
 export { renderEntries, findTriggers } from './modules/user'
 
 export const name = 'huaji-meme'
@@ -107,13 +109,81 @@ export function apply(ctx: Context, config: MemeConfig) {
       access = access.exclude(root.intersect(makeUserFilter(config.userBlacklist)))
     }
 
-    // 图片收集中间件必须早于触发中间件，否则等待中的图片消息会被误当关键词命中
-    // prepend=true 插到最前，保证先消费掉等待中的图片消息
-    root.middleware(collector.middleware as any, true)
+    // 图片收集中间件（prepend=true 插到最前）。
+    // 说明：群内收图的落库在 ImageCollector.consume 内部完成；
+    // 这里额外处理**私聊收图**——私聊消息不受「必须 @机器人」限制，
+    // 是官方 QQ 机器人上唯一可靠的收图方式。
+    const imageMiddleware = async (session: any, next: any) => {
+      // 群内收图（imageCollectMode=group）：消费掉图片消息，避免被误当关键词触发
+      if (session.guildId) {
+        const src = collector.consume(session)
+        if (src) return
+        return next()
+      }
+
+      const uid = session.userId || ''
+      if (!uid) return next()
+
+      const pendingPrivate = collector.hasPendingPrivate(uid)
+      if (!pendingPrivate) return next()
+
+      // 用户私聊发「取消」等 → 放弃绑定
+      const text = (session.content || '').trim()
+      if (/^(取消|算了|不加了|退出|\/取消)$/.test(text)) {
+        collector.cancelPrivate(uid)
+        return '已取消图片绑定。'
+      }
+
+      // 私聊发文字（非取消）→ 提示用法，不消费队列
+      if (!pickImage(session)) {
+        return '请直接发送图片（不带其他文字）即可绑定。若想放弃，回复「取消」。'
+      }
+
+      // 有图片：从队列取出关键词与群号后落库
+      const keyword = collector.pendingKeywordOf(uid)
+      const guildId = collector.pendingGuildOf(uid)
+      const src = pickImage(session)
+      collector.cancelPrivate(uid)
+      if (!keyword || !guildId || !src) return next()
+
+      const quota = await srv.checkQuota({ userId: session.userId, guildId })
+      if (quota) return `图片收到，但${quota}，关键词「${keyword}」未绑定。`
+      await root.database.create('huaji_meme', {
+        userId: session.userId,
+        guildId,
+        keyword,
+        type: 'image',
+        content: src,
+        createdAt: new Date(),
+      })
+      return `✅ 已绑定图片梗「${keyword}」，已保存到该群。群里有人说 ${keyword} 时我就会发这张图。`
+    }
+    // 标记并注册，供集成测试直接取用（mock 的消息队列串行，无法模拟并发场景）
+    ;// 挂到 Service 上供集成测试取用（fork 后入口 ctx 的属性在根上下文读不到）
+    ;(srv as any)._collector = collector
+    ;(srv as any)._imageMiddleware = imageMiddleware
+    root.middleware(imageMiddleware as any, true)
+
+    // 超时释放由 ImageCollector 内部定时器负责（waitPrivate 到点自动 resolve(null)），
+    // 群内发指令的那一侧会收到「未收到图片（已超时或取消）」的提示。
 
     applyTrigger(access, srv, collector)
-    applyUserCommands(access, srv, collector)
-    applyAdminCommands(access, srv)
+    slashAliases(access, (c) => {
+      applyUserCommands(c, srv, collector)
+      applyAdminCommands(c, srv)
+    })
+
+    // 指令清单：便于管理员复制到 QQ 开放平台「指令配置」
+    access.command('梗指令清单')
+      .action(() => renderCommandList())
+
+    // 私聊收图需要私聊通道可用，这里做一次提示
+    if (config.imageCollectMode === 'private' && !config.allowPrivateChat) {
+      logger.warn('图片采集模式为「私聊发图」，但【是否允许私聊使用】已关闭 —— 添加梗图将无法完成，请调整其中一项。')
+    }
+    if (config.imageCollectMode === 'group') {
+      logger.info('图片采集模式为「群内发图」，请确保各群已给机器人开通「获取群内全部消息」权限。')
+    }
 
     logger.info('huaji-meme 已加载，发送【梗帮助】查看用法')
   })

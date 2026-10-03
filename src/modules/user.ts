@@ -1,7 +1,7 @@
 import { Context } from 'koishi'
 import { MemeEntry } from '../config'
 import { MemeService } from '../service'
- import { ImageCollector, pickImage } from '../collector'
+import { ImageCollector, pickImage } from '../collector'
 import { parseKeywordContent } from '../helpers'
 
 const PROMPT_MS = 120_000
@@ -116,66 +116,91 @@ export function applyUserCommands(ctx: Context, srv: MemeService, collector: Ima
       return `已绑定文字梗：说到「${keyword}」时我会回：${content}`
     })
 
-  // ── 添加梗图（无参：交互式） ──
-  ctx.command('添加梗图')
-    .alias('加图')
-    .action(async ({ session }: any) => {
-      const s = srv
-      const denied = s.checkAccess(session)
-      if (denied) return denied
-      const quota = await s.checkQuota(session)
-      if (quota) return quota
-
-      await session.send('请在 2 分钟内直接发送图片（可附带任意说明文字）。')
-      const src = await collector.wait(session, PROMPT_MS)
-      if (!src) return '未收到图片，已取消。可重新发送【添加梗图】再试。'
-
-      await session.send('图片已收到！请回复这个梗的关键词（不含空格）。')
-      const keyword = (await session.prompt(PROMPT_MS))?.trim() ?? ''
-      if (!keyword) return '关键词输入超时，已取消。'
-      const bad = s.validateKeyword(keyword)
-      if (bad) return `${bad}，已取消。`
-
-      const quota2 = await s.checkQuota(session)
-      if (quota2) return quota2
-
-      await ctx.database.create('huaji_meme', {
-        userId: s.resolveUserId(session),
-        guildId: session.guildId,
-        keyword,
-        type: 'image',
-        content: src,
-        createdAt: new Date(),
-      })
-      return `已绑定图片梗：说到「${keyword}」时我会发这张图`
-    })
-
-  // ── 添加梗图 <关键词> ──
-  ctx.command('添加梗图 <keyword: string>')
+  // ── 添加梗图 [关键词] ──
+  // ⚠️ 必须只注册**一条**命令：用「无参版 + 带参版」两条会让无参版抢占命令名，
+  // 导致「添加梗图 猫猫」被解析成无参版并挂在 prompt 上。参数用可选形式一次搞定。
+  ctx.command('添加梗图 [keyword: string]')
+    .alias('加图 [keyword: string]')
     .action(async ({ session }: any, ...argv: string[]) => {
       const s = srv
       const denied = s.checkAccess(session)
       if (denied) return denied
-      const keyword = (argv[0] || '').trim()
+
+      let keyword = (argv[0] || '').trim()
+      if (!keyword) {
+        // 没带关键词 → 先问，再收图
+        await session.send(
+          s.config.imageCollectMode === 'group'
+            ? '请先回复这个梗的关键词（不含空格），随后我会提示你直接发送图片。'
+            : '请先回复这个梗的关键词（不含空格）。\n（收图方式：私聊发图，官方 QQ 机器人上更可靠）',
+        )
+        keyword = (await session.prompt(PROMPT_MS))?.trim() ?? ''
+        if (!keyword) return '关键词输入超时，已取消。'
+      }
+
       const bad = s.validateKeyword(keyword)
       if (bad) return bad
       const quota = await s.checkQuota(session)
       if (quota) return quota
 
-      await session.send(`请在 2 分钟内直接发送图片，绑定到关键词「${keyword}」。`)
-      const src = await collector.wait(session, PROMPT_MS)
-      if (!src) return '未收到图片，已取消。'
-
-      await ctx.database.create('huaji_meme', {
-        userId: s.resolveUserId(session),
-        guildId: session.guildId,
-        keyword,
-        type: 'image',
-        content: src,
-        createdAt: new Date(),
-      })
-      return `已绑定图片梗：说到「${keyword}」时我会发这张图`
+      return await collectAndBind(ctx, s, collector, session, keyword)
     })
+
+  // ── 收图并绑定的公共逻辑（私聊 / 群内两种模式）──
+  async function collectAndBind(
+    ctx: Context,
+    s: MemeService,
+    collector: ImageCollector,
+    session: any,
+    keyword: string,
+  ): Promise<string> {
+    const timeoutMs = (s.config.imageCollectTimeout || 120) * 1000
+    const mins = Math.max(1, Math.round(timeoutMs / 60000))
+
+    if (s.config.imageCollectMode === 'group') {
+      // 先入队再发提示：确保用户紧接着发来的图片一定能被收集到
+      const waiting = collector.waitGroup(session, keyword, timeoutMs)
+      await session.send(`请在 ${mins} 分钟内直接发送图片，绑定到关键词「${keyword}」。`)
+      const src = await waiting
+      if (!src) return `未收到图片（已超时或取消），关键词「${keyword}」未绑定。可重新发送【添加梗图】再试。`
+      return await saveImage(ctx, s, session, keyword, src)
+    }
+
+    // 默认：私聊收图。群里发指令 → 用户私聊发图 → 按 userId+关键词绑定回本群
+    // 同样先入队，避免用户在提示语到达前就发图导致漏收
+    const waiting = collector.waitPrivate(session, keyword, timeoutMs)
+    await session.send(
+      `请在 ${mins} 分钟内**私聊机器人**发送图片，绑定到关键词「${keyword}」。\n` +
+      '（官方 QQ 机器人在群里收不到纯图片消息，QQ 也不支持同时 @ 和发图，所以请发到私聊）\n' +
+      '若私聊发不出去，请让机器人管理员在 QQ 开放平台后台「沙箱配置 → 消息列表」里加上你的 QQ 号。\n' +
+      '想放弃可直接回复「取消」。',
+    )
+    const src = await waiting
+    if (!src) {
+      return `未收到图片（已超时或取消），关键词「${keyword}」未绑定。可重新发送【添加梗图】再试。`
+    }
+    return await saveImage(ctx, s, session, keyword, src)
+  }
+
+  async function saveImage(
+    ctx: Context,
+    s: MemeService,
+    session: any,
+    keyword: string,
+    src: string,
+  ): Promise<string> {
+    const quota = await s.checkQuota(session)
+    if (quota) return quota
+    await ctx.database.create('huaji_meme', {
+      userId: s.resolveUserId(session),
+      guildId: session.guildId,
+      keyword,
+      type: 'image',
+      content: src,
+      createdAt: new Date(),
+    })
+    return `已绑定图片梗：说到「${keyword}」时我会发这张图`
+  }
 
   // ── 编辑梗 <关键词> ──
   ctx.command('编辑梗 <keyword: string>')

@@ -49,6 +49,15 @@ export interface Config {
   allowEdit: boolean
   /** 触发时是否 @ 触发者 */
   atSenderOnTrigger: boolean
+  /**
+   * 图片采集方式：
+   * - private（默认）：群里发指令后引导用户私聊机器人发图。私聊不受「必须 @机器人」限制，
+   *   官方 QQ 机器人上唯一可靠的收图方式。
+   * - group：仍在群里直接发图。要求该群已给机器人开通「获取群内全部消息」权限。
+   */
+  imageCollectMode: 'private' | 'group'
+  /** 添加梗图后等待用户发图的超时秒数（超时自动释放队列） */
+  imageCollectTimeout: number
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -101,4 +110,15 @@ export const Config: Schema<Config> = Schema.object({
   atSenderOnTrigger: Schema.boolean()
     .default(false)
     .description('触发梗词时是否 @ 触发者（部分连接器不支持回复内的 @）'),
+  imageCollectMode: Schema.union([
+    Schema.const('private').description('私聊发图（默认，推荐）：群里发指令后引导用户私聊机器人发图。官方 QQ 机器人上唯一可靠的方式'),
+    Schema.const('group').description('群内直接发图：需群主在 QQ 群设置里给机器人开通「获取群内全部消息」权限，否则收不到纯图片消息'),
+  ] as const)
+    .default('private')
+    .description('添加梗图时图片的采集方式'),
+  imageCollectTimeout: Schema.natural()
+    .default(120)
+    .min(10)
+    .max(600)
+    .description('添加梗图后等待用户发图的秒数，超时自动释放队列（防止用户不发图长期占用）'),
 })

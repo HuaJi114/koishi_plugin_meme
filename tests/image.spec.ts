@@ -55,7 +55,7 @@ describe('图片收集器 · 单元测试', () => {
     const app = new Context()
     const collector = new ImageCollector(app)
     const session = fakeSession()
-    const waiting = collector.wait(session, 1000)
+    const waiting = collector.waitGroup(session, 'kw', 1000)
     expect(collector.isPending(session)).to.be.true
 
     const imgSession = fakeSession({
@@ -70,7 +70,7 @@ describe('图片收集器 · 单元测试', () => {
   it('超时会 resolve null', async () => {
     const app = new Context()
     const collector = new ImageCollector(app)
-    const result = await collector.wait(fakeSession(), 30)
+    const result = await collector.waitGroup(fakeSession(), 'kw', 30)
     expect(result).to.be.null
   })
 
@@ -78,7 +78,7 @@ describe('图片收集器 · 单元测试', () => {
     const app = new Context()
     const collector = new ImageCollector(app)
     const session = fakeSession()
-    const waiting = collector.wait(session, 200)
+    const waiting = collector.waitGroup(session, 'kw', 200)
     const textSession = fakeSession({ elements: [{ type: 'text', attrs: { content: '说明文字' } }] })
     expect(collector.consume(textSession)).to.be.null
     const imgSession = fakeSession({ elements: [{ type: 'image', attrs: { src: 'x.png' } }] })
@@ -91,8 +91,8 @@ describe('图片收集器 · 单元测试', () => {
     const collector = new ImageCollector(app)
     const s1 = fakeSession({ userId: '1001' })
     const s2 = fakeSession({ userId: '2002' })
-    const w1 = collector.wait(s1, 200)
-    const w2 = collector.wait(s2, 200)
+    const w1 = collector.waitGroup(s1, 'kw', 200)
+    const w2 = collector.waitGroup(s2, 'kw', 200)
     collector.consume(fakeSession({ userId: '2002', elements: [{ type: 'image', attrs: { src: 'b.png' } }] }))
     expect(await w2).to.equal('b.png')
     expect(collector.isPending(s1)).to.be.true
@@ -103,8 +103,8 @@ describe('图片收集器 · 单元测试', () => {
     const app = new Context()
     const collector = new ImageCollector(app)
     const session = fakeSession()
-    const first = collector.wait(session, 500)
-    const second = collector.wait(session, 500)
+    const first = collector.waitGroup(session, 'kw', 500)
+    const second = collector.waitGroup(session, 'kw', 500)
     expect(await first).to.be.null
     collector.consume(fakeSession({ elements: [{ type: 'image', attrs: { src: 'c.png' } }] }))
     expect(await second).to.equal('c.png')
@@ -159,7 +159,7 @@ describe('图片梗绑定流程', () => {
     const session = fakeSession({ guildId: '888', userId: '1001' })
 
     // 复刻 user.ts 中「添加梗图 <关键词>」的核心步骤
-    const waiting = collector.wait(session, 1000)
+    const waiting = collector.waitGroup(session, 'kw', 1000)
     expect(collector.isPending(session)).to.be.true
 
     // 模拟用户发来图片
@@ -184,7 +184,7 @@ describe('图片梗绑定流程', () => {
 
   it('图片梗被触发时以 image 元素发出', async () => {
     const session = fakeSession({ guildId: '888', userId: '1001' })
-    const waiting = collector.wait(session, 1000)
+    const waiting = collector.waitGroup(session, 'kw', 1000)
     const src = collector.consume(fakeSession({
       guildId: '888', userId: '1001',
       elements: [{ type: 'image', attrs: { src: 'file://cat.png' } }],
@@ -203,7 +203,7 @@ describe('图片梗绑定流程', () => {
 
   it('同名关键词可并存文字与图片多条，触发随机取一条', async () => {
     const session = fakeSession({ guildId: '888', userId: '1001' })
-    const waiting = collector.wait(session, 1000)
+    const waiting = collector.waitGroup(session, 'kw', 1000)
     const src = collector.consume(fakeSession({
       guildId: '888', userId: '1001',
       elements: [{ type: 'image', attrs: { src: 'file://img.png' } }],
@@ -244,7 +244,7 @@ describe('图片梗绑定流程', () => {
 
     // 进入等待图片状态
     const session = fakeSession({ guildId: '888', userId: '3003' })
-    collector.wait(session, 500)
+    collector.waitGroup(session, 'kw', 500)
     expect(collector.isPending(session)).to.be.true
 
     // 模拟发图消息经过触发中间件：应被收集器拦下，不进入触发逻辑

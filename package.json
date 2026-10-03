@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-huaji-meme",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "群聊梗词绑定机器人：把文字/图片与关键词绑定，说出关键词自动发送",
   "contributors": [
     "huaji250 <945766041@qq.com>"
