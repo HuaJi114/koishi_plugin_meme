@@ -18,7 +18,8 @@
   "typings": "lib/index.d.ts",
   "files": [
     "lib",
-    "readme.md"
+    "README.md",
+    "LICENSE"
   ],
   "keywords": [
     "chatbot",
