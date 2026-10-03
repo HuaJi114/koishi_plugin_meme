@@ -32,7 +32,7 @@ export function applyAdminCommands(ctx: Context, srv: MemeService) {
       const denied = guardAdmin(session)
       if (denied) return denied
       const keyword = (argv[0] || '').trim()
-      if (!keyword) return '用法：管理删除 <关键词> [序号]（不带序号则删除该关键词全部内容）'
+      if (!keyword) return '用法：管理删除 〈关键词〉 [序号]（不带序号则删除该关键词全部内容）'
       const idx = argv[1] ? Number(argv[1]) : 0
 
       const all = await srv.getEntries(session.guildId, keyword)

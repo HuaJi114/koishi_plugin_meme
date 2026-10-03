@@ -61,6 +61,9 @@ function looksLikeImage(src: string): boolean {
 export function applyUserCommands(ctx: Context, srv: MemeService, collector: ImageCollector) {
 
   // ── 梗帮助 ──
+  // 注意：帮助文本里的参数占位符必须用**全角**尖括号「〈〉」或方括号「【】」，
+  // 不能用半角 < >——否则会被 Koishi 的 Argv 解析器当成命令参数占位符，
+  // 在文本末尾回填出 </关键词></文字内容> 之类的闭合标签。
   ctx.command('梗帮助')
     .alias('meme帮助')
     .action(async ({ session }: any) => {
@@ -70,14 +73,16 @@ export function applyUserCommands(ctx: Context, srv: MemeService, collector: Ima
       const c = s.config
       return [
         '【梗词玩法】',
-        '· 添加梗 <关键词> <文字内容>  —— 绑定一段文字',
+        '· 添加梗 〈关键词〉 〈文字内容〉  —— 绑定一段文字',
         '· 添加梗图                    —— 按提示依次发送图片、回复关键词',
-        '· 添加梗图 <关键词>            —— 直接带关键词，随后发图',
-        '· 编辑梗 <关键词>             —— 修改自己绑定的内容（文字/图片均可）',
-        '· 删除梗 <关键词>             —— 删除自己绑定的全部同名词条',
+        '· 添加梗图 〈关键词〉            —— 直接带关键词，随后发图',
+        '· 编辑梗 〈关键词〉             —— 修改自己绑定的内容（文字/图片均可）',
+        '· 删除梗 〈关键词〉             —— 删除自己绑定的全部同名词条',
         '· 我的梗                      —— 查看自己创建的词条',
         '· 梗列表                      —— 查看本群全部词条',
         '· 梗帮助                      —— 本帮助',
+        '',
+        '举例：发送「添加梗 233 你干嘛哎哟」，群里有人说 233 就会自动回复你干嘛哎哟。',
         '',
         `触发方式：${c.matchMode === 'exact' ? '整条消息完全等于关键词' : '消息中出现关键词即触发'}${c.requireAt ? '（需 @机器人）' : ''}`,
         '同一关键词可绑定多条内容，触发时随机发送其中一条。',
@@ -93,7 +98,7 @@ export function applyUserCommands(ctx: Context, srv: MemeService, collector: Ima
       const denied = s.checkAccess(session)
       if (denied) return denied
       const parsed = parseKeywordContent(argv.join(' '))
-      if (!parsed) return '用法：添加梗 <关键词> <文字内容>，例如「添加梗 233 你干嘛哎哟」'
+      if (!parsed) return '用法：添加梗 〈关键词〉 〈文字内容〉，例如「添加梗 233 你干嘛哎哟」'
       const { keyword, content } = parsed
       const bad = s.validateKeyword(keyword)
       if (bad) return bad
@@ -180,7 +185,7 @@ export function applyUserCommands(ctx: Context, srv: MemeService, collector: Ima
       if (denied) return denied
       if (!s.config.allowEdit) return '本群已关闭【编辑梗】功能，请删除后重新添加。'
       const keyword = (argv[0] || '').trim()
-      if (!keyword) return '用法：编辑梗 <关键词>'
+      if (!keyword) return '用法：编辑梗 〈关键词〉'
 
       const isAdmin = s.isAdmin(session)
       const all = await s.getEntries(session.guildId, keyword)
@@ -222,7 +227,7 @@ export function applyUserCommands(ctx: Context, srv: MemeService, collector: Ima
       const denied = s.checkAccess(session)
       if (denied) return denied
       const keyword = (argv[0] || '').trim()
-      if (!keyword) return '用法：删除梗 <关键词>'
+      if (!keyword) return '用法：删除梗 〈关键词〉'
 
       const all = await s.getEntries(session.guildId, keyword)
       if (!all.length) return `本群没有关键词「${keyword}」`
@@ -240,7 +245,7 @@ export function applyUserCommands(ctx: Context, srv: MemeService, collector: Ima
       const denied = s.checkAccess(session)
       if (denied) return denied
       const list = await ctx.database.get('huaji_meme', { userId: s.resolveUserId(session) })
-      if (!list.length) return '你还没有创建过梗词。发送【添加梗 <关键词> <内容>】试试。'
+      if (!list.length) return '你还没有创建过梗词。发送【添加梗 〈关键词〉 〈内容〉】试试。'
       return `你创建的梗词（${list.length} 条）：\n${renderEntries(list, false, true)}`
     })
 

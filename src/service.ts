@@ -31,20 +31,35 @@ export class MemeService extends Service {
    * （本项目反复踩过的坑，新增字段务必同步这里）
    */
   private extendModels() {
-    this.ctx.model.extend('huaji_meme', {
-      // minato 用 'id' 声明自增整数主键（TS 类型未覆盖，故 as any）
-      id: 'id' as any,
-      userId: 'string',
-      guildId: 'string',
-      keyword: 'string',
-      type: 'string',
-      content: 'string',
-      createdAt: 'timestamp',
-    }, {
-      primary: 'id',
-      // id 为自增整数主键：必须显式声明 autoInc，否则 create 时会抛 missing primary key
-      autoInc: true,
-    })
+    try {
+      this.ctx.model.extend('huaji_meme', {
+        // ⚠️ 主键类型必须是 'primary'，**不能写 'id'**：
+        // 'id' 只有 database-memory 驱动认识，@minatojs/driver-sqlite 的类型表
+        // 里没有它，会直接 throw "unsupported type: id" → 建表失败 →
+        // 每条指令查询数据库都抛错 → 插件表现为「加载了但完全无响应」，且日志只报一行警告。
+        // 详见 README「数据库驱动兼容性」。
+        id: 'primary' as any,
+        userId: 'string',
+        guildId: 'string',
+        keyword: 'string',
+        type: 'string',
+        content: 'string',
+        createdAt: 'timestamp',
+      }, {
+        primary: 'id',
+        // id 为自增整数主键：必须显式声明 autoInc，否则 create 时会抛 missing primary key
+        autoInc: true,
+      })
+    } catch (err) {
+      // 建表失败不能静默——否则用户只会看到「没反应」，排查不到原因
+      this.ctx.logger('huaji-meme').error(
+        '数据库表 huaji_meme 初始化失败：%s\n' +
+        '插件将无法正常工作。请检查数据库插件（database-memory / database-sqlite 等）是否已安装并启用，' +
+        '以及数据库文件权限与连接配置。',
+        (err as Error).message,
+      )
+      throw err
+    }
   }
 
   // ───────────── 权限判定 ─────────────
