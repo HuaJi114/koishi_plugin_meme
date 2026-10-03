@@ -1,0 +1,63 @@
+{
+  "name": "koishi-plugin-huaji-meme",
+  "version": "0.1.0",
+  "description": "群聊梗词绑定机器人：把文字/图片与关键词绑定，说出关键词自动发送",
+  "contributors": [
+    "huaji250 <945766041@qq.com>"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/HuaJi114/koishi_plugin_meme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HuaJi114/koishi_plugin_meme.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HuaJi114/koishi_plugin_meme/issues"
+  },
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "readme.md"
+  ],
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "meme",
+    "梗",
+    "梗词"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "prepublishOnly": "tsc -b",
+    "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test:mock": "mocha -r esbuild-register \"tests/**/*.spec.ts\" --timeout 8000 --exit"
+  },
+  "peerDependencies": {
+    "koishi": "^4.15.0"
+  },
+  "devDependencies": {
+    "@koishijs/plugin-database-memory": "^3.7.0",
+    "@koishijs/plugin-mock": "^2.6.6",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.10.0",
+    "chai": "^6.2.2",
+    "esbuild-register": "^3.6.0",
+    "koishi": "^4.15.0",
+    "mocha": "^12.0.2",
+    "typescript": "^5.3.0"
+  },
+  "koishi": {
+    "description": {
+      "zh": "群聊梗词绑定机器人：把文字/图片与关键词绑定，说出关键词自动发送",
+      "en": "Bind text or images to keywords and auto-send them when someone says the keyword"
+    },
+    "service": {
+      "required": [
+        "database"
+      ]
+    }
+  }
+}
