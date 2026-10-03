@@ -171,11 +171,11 @@ export function apply(ctx: Context, config: MemeConfig) {
     slashAliases(access, (c) => {
       applyUserCommands(c, srv, collector)
       applyAdminCommands(c, srv)
+      // 指令清单：便于管理员复制到 QQ 开放平台「指令配置」
+      // ⚠️ 必须放在 slashAliases 回调内，否则拿不到 / 斜杠别名
+      c.command('梗指令清单')
+        .action(() => renderCommandList())
     })
-
-    // 指令清单：便于管理员复制到 QQ 开放平台「指令配置」
-    access.command('梗指令清单')
-      .action(() => renderCommandList())
 
     // 私聊收图需要私聊通道可用，这里做一次提示
     if (config.imageCollectMode === 'private' && !config.allowPrivateChat) {

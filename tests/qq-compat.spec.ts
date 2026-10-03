@@ -129,6 +129,27 @@ describe('QQ 斜杠指令菜单适配', () => {
     expect(r[0]).to.contain('/添加梗')
     try { await app.stop() } catch { /* noise */ }
   })
+
+  it('梗指令清单也支持斜杠形式（回归：曾漏在 slashAliases 之外）', async () => {
+    const app = mk()
+    await app.start()
+    const r = await send(app, '/梗指令清单')
+    expect(r.length).to.be.greaterThan(0)
+    expect(r[0]).to.contain('/梗帮助')
+    try { await app.stop() } catch { /* noise */ }
+  })
+
+  it('连续发送多条指令后斜杠形式仍可用', async () => {
+    const app = mk()
+    await app.start()
+    // 先发几条普通指令制造状态，再试斜杠形式
+    await send(app, '/添加梗 aaa 内容')
+    await send(app, '添加梗 bbb 内容')
+    const r = await send(app, '/梗指令清单')
+    expect(r.length).to.be.greaterThan(0)
+    expect(r[0]).to.contain('/添加梗')
+    try { await app.stop() } catch { /* noise */ }
+  })
 })
 
 describe('图片采集模式 · 私聊收图（默认）', () => {
